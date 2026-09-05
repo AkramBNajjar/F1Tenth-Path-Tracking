@@ -71,8 +71,16 @@ def run(controller, max_steps=30000, verbose=True):
 COLUMNS = ["t", "x", "y", "theta", "v", "steer", "speed", "wall_dist", "err"]
 
 if __name__ == "__main__":
-    ctrl = WallFollower(desired_dist=0.9, kp=1.0, kd=0.6, ki=0.0, lookahead=1.0)
-    log, outcome = run(ctrl)
-    np.savetxt("logs_wall_follower.csv", log, delimiter=",",
-               header=",".join(COLUMNS), comments="")
-    print("\nwrote logs_wall_follower.csv")
+    import sys
+    if len(sys.argv) > 1 and sys.argv[1] == "sweep":
+        print(f"{'lookahead':>10} {'outcome':>13} {'lap_t':>7} {'mean':>7} {'max':>7}")
+        for la in [0.3, 0.5, 0.8, 1.0, 1.5, 2.0]:
+            log, outcome = run(WallFollower(kp=1.0, kd=0.6, lookahead=la), verbose=False)
+            print(f"{la:>10.1f} {outcome:>13} {log[-1,0]:>7.2f} "
+                  f"{np.abs(log[:,8]).mean():>7.3f} {np.abs(log[:,8]).max():>7.3f}")
+    else:
+        ctrl = WallFollower(desired_dist=0.9, kp=1.0, kd=0.6, ki=0.0, lookahead=1.0)
+        log, outcome = run(ctrl)
+        np.savetxt("logs_wall_follower.csv", log, delimiter=",",
+                   header=",".join(COLUMNS), comments="")
+        print("\nwrote logs_wall_follower.csv")
