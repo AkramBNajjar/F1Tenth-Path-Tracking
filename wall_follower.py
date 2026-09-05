@@ -34,12 +34,7 @@ class WallFollower:
         self._prev_err = err
         steer = -(self.kp * err + self.kd * deriv + self.ki * self._integral)
         steer = float(np.clip(steer, -0.4, 0.4))
-        if abs(steer) < 0.09:
-            speed = 5.0
-        elif abs(steer) < 0.18:
-            speed = 3.0
-        else:
-            speed = 1.8
+        speed = 2.5
         return steer, speed, dist_now, err
 
 def run(controller, max_steps=30000, verbose=True):
@@ -76,7 +71,7 @@ def run(controller, max_steps=30000, verbose=True):
 COLUMNS = ["t", "x", "y", "theta", "v", "steer", "speed", "wall_dist", "err"]
 
 if __name__ == "__main__":
-    ctrl = WallFollower(desired_dist=0.9, kp=1.2, kd=0.6, ki=0.0, lookahead=0.5)
+    ctrl = WallFollower(desired_dist=0.9, kp=1.0, kd=0.6, ki=0.0, lookahead=1.0)
     log, outcome = run(ctrl)
     np.savetxt("logs_wall_follower.csv", log, delimiter=",",
                header=",".join(COLUMNS), comments="")
