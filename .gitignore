@@ -1,1 +1,2 @@
 logs_*.csv
+__pycache__/
