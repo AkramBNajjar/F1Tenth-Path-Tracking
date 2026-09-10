@@ -7,8 +7,8 @@ The goal is not to build a car that drives. It is to **measure** how different
 controllers trade tracking accuracy against speed, stability, and control
 effort — and to find where each one breaks.
 
-**Status:** three controllers working in simulation. MPC and ROS 2 next.
-Hardware in Spring 2027.
+**Status:** four controllers working in simulation, including MPC. ROS 2 port
+next. Hardware in Spring 2027.
 
 ---
 
@@ -36,6 +36,8 @@ python wall_follower.py            # reactive controller, single run
 python wall_follower.py sweep      # lookahead sweep
 python path_tracking.py            # pure pursuit + Stanley
 python path_tracking.py sweep      # parameter sweeps for both
+python mpc.py                      # model predictive control
+python mpc.py sweep                # horizon and speed sweep
 python plot_tracking.py            # regenerate figures
 ```
 
@@ -202,7 +204,97 @@ claims about the controllers.
 
 ---
 
-## A bug worth documenting
+## Part 3 — Model predictive control
+
+Pure pursuit and Stanley are *reactive*: they look at the current error and
+respond. MPC is *predictive*. At every control step it simulates the vehicle
+forward over a horizon, solves for the sequence of steering commands that
+minimises a cost function, applies only the first one, and re-solves next step.
+
+### Formulation
+
+Written in **path-frame error coordinates**, not global position:
+
+    state  e = [e_y, e_psi]      lateral offset from path, heading error
+    input  delta                 steering angle
+
+    e_y[k+1]   = e_y[k]   + dt*v[k]*e_psi[k]
+    e_psi[k+1] = e_psi[k] + dt*v[k]/L*delta[k] - dt*v[k]*kappa[k]
+
+    minimise  sum( q_y*e_y^2 + q_psi*e_psi^2 + r*delta^2 )
+                + rd*(delta[k+1] - delta[k])^2
+    s.t.      |delta| <= 0.4 rad
+
+Solved as a QP with OSQP, horizon N = 10 at dt = 0.05 s, re-solved at 20 Hz
+and held between solves.
+
+### Three things the geometric controllers cannot do
+
+**Curvature feedforward.** The raceline carries a curvature column. MPC samples
+it over the horizon as a known disturbance, so it begins turning before any
+error appears. Pure pursuit approximates this with a lookahead heuristic;
+Stanley does not do it at all.
+
+**Constraints inside the optimisation.** Pure pursuit and Stanley compute a
+steering command and then clip it to the +/-0.4 rad limit, which silently
+invalidates the geometry they just solved. MPC plans a trajectory that respects
+the limit.
+
+**Control effort as a tunable.** `rd` penalises steering rate directly, so the
+accuracy-versus-effort tradeoff that is *fixed* for the geometric controllers
+becomes a knob.
+
+### Results
+
+| Controller | Mean CTE | Max CTE | Lap time | Steering rate | Compute |
+|---|---|---|---|---|---|
+| Pure pursuit (Ld = 1.0) | 1.98 cm | 5.51 cm | 37.19 s | 0.12 rad/s | negligible |
+| Stanley (k = 3.5) | **0.64 cm** | **3.05 cm** | 37.14 s | 2.51 rad/s | negligible |
+| MPC (N = 10) | 1.39 cm | 4.26 cm | 37.18 s | 0.18 rad/s | 15 ms/solve |
+
+Horizon and speed sweep, all nine configurations completing a lap:
+
+| N | vgain | Lap time | Mean CTE | Max CTE | ms/solve |
+|---|---|---|---|---|---|
+| 6 | 0.6 | 37.18 s | 1.33 cm | 4.82 cm | 9.4 |
+| 6 | 0.7 | 31.99 s | 2.33 cm | 6.75 cm | 9.4 |
+| 6 | 0.8 | 28.11 s | 3.71 cm | 10.15 cm | 9.9 |
+| 10 | 0.6 | 37.18 s | 1.39 cm | 4.26 cm | 15.4 |
+| 10 | 0.8 | 28.12 s | 3.68 cm | 11.87 cm | 15.9 |
+| 20 | 0.6 | 37.18 s | 1.34 cm | 4.50 cm | 31.5 |
+| 20 | 0.8 | 28.12 s | 3.68 cm | 11.87 cm | 30.7 |
+
+### Findings
+
+**1. MPC is not the most accurate controller here. Stanley is.** At matched
+speed Stanley holds 0.64 cm against MPC's 1.39 cm. The headline number does not
+go to the most sophisticated method.
+
+**2. MPC wins on accuracy per unit of control effort.** It is 1.4x tighter than
+pure pursuit for 1.5x the steering activity. Stanley is 3x tighter for 20x the
+activity. On that axis MPC dominates both — which is the actual argument for
+optimisation-based control, not raw tracking accuracy.
+
+**3. It is the only controller that laps cleanly at every speed tested.** All
+nine sweep configurations completed, including vgain 0.8 at 28.11 s — faster
+than any lap by the other controllers.
+
+**4. Longer horizons are not better.** N = 6 and N = 20 track identically
+(1.33 vs 1.34 cm) while N = 20 costs 3.3x the compute. At this speed, curvature
+far ahead does not change the immediate steering decision.
+
+**5. Worst case degrades faster than average with speed.** From vgain 0.6 to
+0.8, mean CTE grows 2.8x but max CTE grows 2.5-2.8x and reaches 11.9 cm. The
+same mean-versus-max divergence that showed up in the wall follower.
+
+**6. The compute cost is real but not prohibitive.** ~1000x the arithmetic of a
+geometric controller for a 1.4x accuracy gain — but 15 ms/solve on a laptop
+means this runs at 60 Hz on real hardware.
+
+
+---
+
+## Two bugs worth documenting
 
 Stanley initially crashed 0.47 s into every run, at every gain value — including
 gains an order of magnitude apart, which produced *identical* logs.
@@ -222,6 +314,33 @@ path heading directly and so was fully exposed.
 A silent data-convention mismatch that one consumer is immune to and another is
 not is a real class of integration failure, and worth having found once.
 
+### 2. MPC in global coordinates: the weights that did nothing
+
+The first MPC attempt tracked absolute x, y, and theta against absolute
+waypoints. It crashed at the same corner every lap, at 13.19 s, regardless of
+cost weights — `q_pos` swept from 20 to 2000, `q_yaw` from 0 to 10, rate
+penalties across an order of magnitude. Every run failed within 0.6 s of the
+same point.
+
+**Weight-independence was the tell**, exactly as gain-independence had been for
+Stanley: if the knobs do not change the outcome, the problem is not the knobs.
+
+Ruled out along the way: steering sign (verified empirically against the
+simulator — +0.25 rad produced +0.53 rad of heading change), numerical
+conditioning (shifting the QP into local coordinates changed nothing),
+overspeed (removing a 10% speed allowance bought 0.5 s), and timestep and
+horizon length (finer discretisation made it worse).
+
+The cause was the formulation itself. Vehicle heading accumulates without bound
+over a lap — theta exceeded 4 rad and kept climbing — and the affine
+linearisation terms scale with theta, so the QP conditions progressively worse
+as the lap proceeds. Rewriting in path-frame error coordinates fixed it on the
+first attempt: every state now sits near zero, the linearisation stays valid,
+and the cost weights carry physical meaning.
+
+Both bugs were diagnosed the same way: *the knob does not matter, so the problem
+is not the knob.*
+
 ---
 
 ## Roadmap
@@ -231,7 +350,7 @@ not is a real class of integration failure, and worth having found once.
 - [x] Pure pursuit against an optimized raceline
 - [x] Stanley controller
 - [x] True cross-track error and control-effort metrics
-- [ ] MPC over the bicycle model
+- [x] MPC over the bicycle model (path-frame error coordinates, OSQP)
 - [ ] Vehicle dynamics studies: kinematic vs dynamic model, friction sweep,
       understeer gradient, load transfer
 - [ ] Port to ROS 2 nodes
