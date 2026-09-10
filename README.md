@@ -8,7 +8,8 @@ controllers trade tracking accuracy against speed, stability, and control
 effort, and to find where each one breaks.
 
 **Status:** four controllers in simulation, characterised across speed, surface
-friction and handling balance. ROS 2 port next. Hardware in Spring 2027.
+friction, handling balance and longitudinal load transfer. ROS 2 port next.
+Hardware in Spring 2027.
 
 ---
 
@@ -41,6 +42,7 @@ python mpc.py sweep                # horizon and speed sweep
 python mpc_dyn.py                  # MPC with the dynamic (tire slip) model
 python friction_sweep.py           # all controllers vs surface grip
 python balance_sweep.py            # all controllers vs understeer/oversteer
+python loadtransfer_sweep.py       # all controllers vs CG height under braking
 python plot_tracking.py            # regenerate figures
 ```
 
@@ -554,6 +556,103 @@ engineering problems rather than setup details.
 
 ---
 
+## Part 7: A prediction that did not hold
+
+Parts 4, 5 and 6 each confirmed a hypothesis. This one does not, which makes it
+the most useful section here.
+
+### The prediction
+
+Under braking, load shifts onto the front axle. Front normal load rises, rear
+falls, and since cornering stiffness scales with normal load the front stiffens
+while the rear softens. That pushes the vehicle toward oversteer. Taller centres
+of gravity transfer more load, so the effect should grow with `h`.
+
+Working it through with the simulator's own load-transfer terms:
+
+    F_zf proportional to (g*lr - a_x*h)
+    F_zr proportional to (g*lf + a_x*h)
+
+    K(a_x, h) = lr/(C_Sf*(g*lr - a_x*h)) - lf/(C_Sr*(g*lf + a_x*h))
+
+| CG height h | K at rest | K braking at 3.8 m/s^2 | Critical speed |
+|---|---|---|---|
+| 0.030 m | +0.00292 | +0.00011 | n/a |
+| 0.074 m (default) | +0.00292 | -0.00421 | 8.9 m/s |
+| 0.140 m | +0.00292 | -0.01177 | 5.3 m/s |
+| 0.180 m | +0.00292 | -0.01764 | 4.3 m/s |
+
+At the default CG the car is predicted to flip from understeer to oversteer
+whenever it brakes hard. At h = 0.180 m the critical speed under braking drops
+to 4.3 m/s, well below the 5.6 m/s the raceline calls for. By the logic of
+Part 6, Stanley should spin.
+
+The raceline brakes below -1 m/s^2 over 16.9% of the track, reaching a peak of
+-3.76 m/s^2.
+
+### The measurement
+
+Mean cross-track error in cm, whole lap and restricted to braking zones, at
+vgain 0.7.
+
+| h (m) | Pure pursuit (all / braking) | Stanley (all / braking) | MPC (all / braking) |
+|---|---|---|---|
+| 0.030 | 3.21 / 4.78 | 2.13 / 5.22 | 0.70 / 0.60 |
+| 0.050 | 3.03 / 4.47 | 2.03 / 4.75 | 0.75 / 0.83 |
+| 0.074 | 3.09 / 4.59 | 2.14 / 4.79 | 0.83 / 0.68 |
+| 0.100 | 2.98 / 4.18 | 2.00 / 4.67 | 0.82 / 0.68 |
+| 0.140 | 2.90 / 3.93 | 1.98 / 4.51 | 0.94 / 1.07 |
+| 0.180 | 2.88 / 4.10 | 1.89 / 4.37 | 0.91 / 0.97 |
+
+![Load transfer sweep](loadtransfer_sweep.png)
+
+**Nothing happens.** A sixfold change in CG height moves tracking error by
+fractions of a centimetre, in no consistent direction, and no controller fails.
+Pushing to vgain 1.0 at h = 0.180 m, roughly twice the predicted critical speed,
+still produced clean laps from all three controllers.
+
+### Why the prediction failed
+
+**1. Critical speed is an open-loop concept.** It describes the divergence rate
+of a vehicle with a fixed steering input and nobody correcting. Every controller
+here runs closed-loop at 100 Hz. A sufficiently fast controller stabilises a
+vehicle above its open-loop critical speed, which is what feedback is for.
+
+**2. The braking events are too short.** The track contains four braking
+segments, the longest 8.8 m, about 1.76 s at speed. Instability above critical
+speed grows exponentially, and exponential growth needs time. A 1.8 s excursion
+into mild oversteer ends before it can run away.
+
+This also explains the contrast with Part 6. There, oversteer was permanent:
+rear cornering stiffness was reduced everywhere on the track, the vehicle was
+above critical speed continuously, and Stanley did spin. Here the same nominal
+instability appears only in transient bursts, and nothing fails.
+
+### The effect that is real, and the one that is not
+
+Braking-zone error runs 1.5x to 2.5x the whole-lap average for both geometric
+controllers: Stanley 5.22 vs 2.13 cm, pure pursuit 4.78 vs 3.21 cm. That looks
+like confirmation of the hypothesis.
+
+It is not. The elevated braking-zone error holds at **every** CG height,
+including h = 0.030 m where K never goes negative at any deceleration the track
+produces. If load transfer were the cause, the gap would grow with `h`. It does
+not. Braking zones are corner entries, and corner entries are harder to track
+than straights regardless of what the load is doing.
+
+Testing whether the suspected effect actually varies with the parameter that is
+supposed to cause it is what separates the two readings.
+
+### What this changes
+
+The theory was right about the balance shift and wrong about whether it matters.
+Both halves are worth keeping. A static stability metric can flag a condition
+that a fast closed-loop controller renders irrelevant, and a metric that
+correlates with degradation is not the same as a metric that causes it.
+
+
+---
+
 ## Two bugs worth documenting
 
 Stanley initially crashed 0.47 s into every run, at every gain value, including
@@ -614,7 +713,7 @@ is not the knob.*
 - [x] Vehicle dynamics: kinematic vs dynamic prediction model, understeer gradient
 - [x] Vehicle dynamics: friction sweep across four controllers
 - [x] Vehicle dynamics: understeer/oversteer sweep, critical speed prediction
-- [ ] Vehicle dynamics: longitudinal load transfer under braking
+- [x] Vehicle dynamics: longitudinal load transfer under braking
 - [ ] Port to ROS 2 nodes
 - [ ] Hardware build (Raspberry Pi 5, RPLIDAR C1, 1/10 chassis)
 - [ ] Sim-to-real: same controllers, measured gap
