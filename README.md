@@ -7,8 +7,8 @@ The goal is not to build a car that drives. It is to **measure** how different
 controllers trade tracking accuracy against speed, stability, and control
 effort — and to find where each one breaks.
 
-**Status:** four controllers working in simulation, including MPC. ROS 2 port
-next. Hardware in Spring 2027.
+**Status:** four controllers in simulation, including MPC with both kinematic
+and dynamic vehicle models. ROS 2 port next. Hardware in Spring 2027.
 
 ---
 
@@ -38,6 +38,7 @@ python path_tracking.py            # pure pursuit + Stanley
 python path_tracking.py sweep      # parameter sweeps for both
 python mpc.py                      # model predictive control
 python mpc.py sweep                # horizon and speed sweep
+python mpc_dyn.py                  # MPC with the dynamic (tire slip) model
 python plot_tracking.py            # regenerate figures
 ```
 
@@ -294,6 +295,83 @@ means this runs at 60 Hz on real hardware.
 
 ---
 
+## Part 4 — Does the prediction model matter?
+
+Kinematic-model MPC left a clear signature: mean tracking error grew from
+1.33 cm to 3.71 cm as lap time dropped from 37.2 s to 28.1 s. Nearly 3x worse,
+purely from going faster.
+
+That pattern points at model mismatch rather than at the optimiser. MPC solves
+exactly — but for the vehicle its model describes. The kinematic bicycle model
+assumes tires go where they point. Real tires generate lateral force only by
+slipping, and slip grows with lateral acceleration, so the model gets worse the
+faster you drive.
+
+**Test:** swap the prediction model, change nothing else. Same cost weights,
+same horizon, same solver, same raceline.
+
+### The dynamic bicycle model
+
+State becomes four-dimensional (Rajamani Ch. 3):
+
+    x = [e_y, e_y_dot, e_psi, e_psi_dot]
+
+Tire lateral force is proportional to slip angle through cornering stiffness.
+Axle cornering stiffness is derived from the simulator's per-unit-load
+coefficients and the static axle loads:
+
+    F_zf = m*g*lr/L = 19.0 N        F_zr = m*g*lf/L = 17.6 N
+    C_f  = C_Sf * F_zf = 89.9 N/rad
+    C_r  = C_Sr * F_zr = 96.2 N/rad
+
+Path curvature enters as a desired yaw rate disturbance, psi_dot_des = v*kappa.
+
+### Result
+
+| vgain | Lap time | Kinematic mean | Dynamic mean | Kinematic max | Dynamic max |
+|---|---|---|---|---|---|
+| 0.6 | 37.2 s | 1.33 cm | **0.79 cm** | 4.82 cm | **3.17 cm** |
+| 0.7 | 32.0 s | 2.33 cm | **0.83 cm** | 6.75 cm | **3.00 cm** |
+| 0.8 | 28.1 s | 3.71 cm | **0.80 cm** | 10.15 cm | **2.87 cm** |
+
+![Model comparison](model_comparison.png)
+
+### Findings
+
+**1. The speed dependence disappears entirely.** Kinematic error nearly triples
+across the speed range; dynamic error is flat at 0.79 / 0.83 / 0.80 cm. Since
+nothing but the prediction model changed, the speed-dependent component of the
+kinematic error was model mismatch, not optimisation error, discretisation, or
+horizon length.
+
+**2. Worst-case improves more than average.** At the fastest setting, max error
+drops from 10.15 cm to 2.87 cm — a 3.5x improvement against 4.6x on the mean.
+The corners, where lateral acceleration is highest and slip matters most, are
+exactly where the better model pays.
+
+**3. It becomes the best controller in the study on effort-adjusted accuracy.**
+0.79 cm at 0.08 rad/s mean steering rate. Stanley reaches 0.64 cm but spends
+2.51 rad/s — 31x the actuator activity for 20% better tracking.
+
+**4. It also solves faster: 2.1 ms vs 15 ms**, despite twice the state
+dimension. Passing A, B and C as matrix parameters is far more solver-friendly
+than the element-wise parameter products the kinematic version used.
+
+### Understeer gradient
+
+The same parameters give a standard vehicle dynamics quantity:
+
+    K = (m/L) * (lr/C_f - lf/C_r) = +0.00292 rad/(m/s^2)
+
+Positive K means the platform **understeers** — at the limit it pushes wide
+rather than rotating. That follows from rear cornering stiffness exceeding
+front (96.2 vs 89.9 N/rad), which is how essentially every production passenger
+car is deliberately set up, because understeer is recoverable and oversteer
+generally is not.
+
+
+---
+
 ## Two bugs worth documenting
 
 Stanley initially crashed 0.47 s into every run, at every gain value — including
@@ -351,8 +429,8 @@ is not the knob.*
 - [x] Stanley controller
 - [x] True cross-track error and control-effort metrics
 - [x] MPC over the bicycle model (path-frame error coordinates, OSQP)
-- [ ] Vehicle dynamics studies: kinematic vs dynamic model, friction sweep,
-      understeer gradient, load transfer
+- [x] Vehicle dynamics: kinematic vs dynamic prediction model, understeer gradient
+- [ ] Vehicle dynamics: friction sweep, load transfer, CG position
 - [ ] Port to ROS 2 nodes
 - [ ] Hardware build (Raspberry Pi 5, RPLIDAR C1, 1/10 chassis)
 - [ ] Sim-to-real: same controllers, measured gap
