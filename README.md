@@ -5,10 +5,10 @@ Implementation and quantitative comparison of path-tracking controllers on the
 
 The goal is not to build a car that drives. It is to **measure** how different
 controllers trade tracking accuracy against speed, stability, and control
-effort — and to find where each one breaks.
+effort, and to find where each one breaks.
 
-**Status:** four controllers in simulation, characterised across speed and
-surface friction. ROS 2 port next. Hardware in Spring 2027.
+**Status:** four controllers in simulation, characterised across speed, surface
+friction and handling balance. ROS 2 port next. Hardware in Spring 2027.
 
 ---
 
@@ -27,7 +27,7 @@ evidence rather than intuition.
 ## Setup
 
 Verified on macOS (Apple Silicon), Python 3.11. See
-[`SETUP_MACOS.md`](SETUP_MACOS.md) — the upstream `f1tenth_gym` package ships
+[`SETUP_MACOS.md`](SETUP_MACOS.md). The upstream `f1tenth_gym` package ships
 stale dependency pins that need working around.
 
 ```bash
@@ -40,6 +40,7 @@ python mpc.py                      # model predictive control
 python mpc.py sweep                # horizon and speed sweep
 python mpc_dyn.py                  # MPC with the dynamic (tire slip) model
 python friction_sweep.py           # all controllers vs surface grip
+python balance_sweep.py            # all controllers vs understeer/oversteer
 python plot_tracking.py            # regenerate figures
 ```
 
@@ -60,7 +61,7 @@ occupancy map.
 | Steering limit | +/- 0.4 rad |
 | Throughput | ~115x realtime headless on an M-series Mac |
 
-Running far faster than realtime is what makes parameter sweeps practical — a
+Running far faster than realtime is what makes parameter sweeps practical: a
 30-point sweep takes seconds.
 
 ---
@@ -74,7 +75,7 @@ error is being reported.
 LiDAR and holds a set distance from a wall. Error is *wall-distance error*.
 
 **Path tracking** (pure pursuit, Stanley) is given a reference path and must
-follow it. Error is **cross-track error** — the perpendicular distance from the
+follow it. Error is **cross-track error**, the perpendicular distance from the
 vehicle to the path. Computed here by projecting onto every path segment and
 taking the minimum, not by distance to the nearest waypoint, which would
 quantise error to the waypoint spacing.
@@ -84,7 +85,7 @@ reported separately.
 
 ---
 
-## Part 1 — PID wall follower (reactive)
+## Part 1: PID wall follower (reactive)
 
 ### Geometry
 
@@ -109,8 +110,8 @@ kp = 1.0, kd = 0.6.
 
 ![Lookahead sweep](lookahead_sweep.png)
 
-**Only 9 of 29 runs completed a lap, and the survivors are scattered** — 0.75
-laps, 0.80–0.95 all crash, 1.00 laps, 1.05–1.40 all crash, 1.45–1.50 lap.
+**Only 9 of 29 runs completed a lap, and the survivors are scattered**: 0.75
+laps, 0.80 to 0.95 all crash, 1.00 laps, 1.05 to 1.40 all crash, 1.45 to 1.50 lap.
 A 0.05 m change flips the outcome.
 
 An earlier six-point sweep at 0.25 m spacing happened to sample 1.0 and 1.5 and
@@ -125,7 +126,7 @@ repeatedly. The metric that can be measured continuously says almost nothing
 about the binary outcome that actually matters.
 
 **2. Two repeatable failure modes.** Crashes cluster at ~7.5 s and ~18.5 s of
-sim time — the same two corners, not random.
+sim time, the same two corners, not random.
 
 **3. The optimum depends entirely on the objective.** Best worst-case error is
 L = 1.00 (max 0.724 m); best mean is L = 0.75 (0.123 m); fastest lap is
@@ -141,7 +142,7 @@ metric.
 
 ---
 
-## Part 2 — Pure pursuit and Stanley (path tracking)
+## Part 2: Pure pursuit and Stanley (path tracking)
 
 Both track an optimized raceline of 783 waypoints carrying position, heading,
 curvature, and a target velocity profile.
@@ -154,7 +155,7 @@ the steering angle of the circular arc from the rear axle to it:
     delta = atan( 2*L*sin(alpha) / Ld )
 
 where `L` is the wheelbase and `alpha` the angle to the goal point in the
-vehicle frame. Purely geometric — no notion of heading error.
+vehicle frame. Purely geometric, with no notion of heading error.
 
 ### Stanley
 
@@ -187,7 +188,7 @@ rate is 2.51 rad/s against 0.12. On a real vehicle that is actuator duty cycle
 and ride quality, not a free win.
 
 **2. The error signatures differ in kind, not just magnitude.** Pure pursuit
-shows clean periodic humps — error rises to 4–5 cm through every corner and
+shows clean periodic humps: error rises to 4 to 5 cm through every corner and
 falls on the straights. That is corner-cutting, exactly as the geometry
 predicts: the controller aims at a point already partway around the bend.
 Stanley shows low-amplitude high-frequency chatter instead. Predictable bias
@@ -206,7 +207,7 @@ claims about the controllers.
 
 ---
 
-## Part 3 — Model predictive control
+## Part 3: Model predictive control
 
 Pure pursuit and Stanley are *reactive*: they look at the current error and
 respond. MPC is *predictive*. At every control step it simulates the vehicle
@@ -274,11 +275,11 @@ go to the most sophisticated method.
 
 **2. MPC wins on accuracy per unit of control effort.** It is 1.4x tighter than
 pure pursuit for 1.5x the steering activity. Stanley is 3x tighter for 20x the
-activity. On that axis MPC dominates both — which is the actual argument for
+activity. On that axis MPC dominates both, which is the actual argument for
 optimisation-based control, not raw tracking accuracy.
 
 **3. It is the only controller that laps cleanly at every speed tested.** All
-nine sweep configurations completed, including vgain 0.8 at 28.11 s — faster
+nine sweep configurations completed, including vgain 0.8 at 28.11 s, faster
 than any lap by the other controllers.
 
 **4. Longer horizons are not better.** N = 6 and N = 20 track identically
@@ -290,20 +291,20 @@ far ahead does not change the immediate steering decision.
 same mean-versus-max divergence that showed up in the wall follower.
 
 **6. The compute cost is real but not prohibitive.** ~1000x the arithmetic of a
-geometric controller for a 1.4x accuracy gain — but 15 ms/solve on a laptop
+geometric controller for a 1.4x accuracy gain, but 15 ms/solve on a laptop
 means this runs at 60 Hz on real hardware.
 
 
 ---
 
-## Part 4 — Does the prediction model matter?
+## Part 4: Does the prediction model matter?
 
 Kinematic-model MPC left a clear signature: mean tracking error grew from
 1.33 cm to 3.71 cm as lap time dropped from 37.2 s to 28.1 s. Nearly 3x worse,
 purely from going faster.
 
 That pattern points at model mismatch rather than at the optimiser. MPC solves
-exactly — but for the vehicle its model describes. The kinematic bicycle model
+exactly, but for the vehicle its model describes. The kinematic bicycle model
 assumes tires go where they point. Real tires generate lateral force only by
 slipping, and slip grows with lateral acceleration, so the model gets worse the
 faster you drive.
@@ -346,13 +347,13 @@ kinematic error was model mismatch, not optimisation error, discretisation, or
 horizon length.
 
 **2. Worst-case improves more than average.** At the fastest setting, max error
-drops from 10.15 cm to 2.87 cm — a 3.5x improvement against 4.6x on the mean.
+drops from 10.15 cm to 2.87 cm, a 3.5x improvement against 4.6x on the mean.
 The corners, where lateral acceleration is highest and slip matters most, are
 exactly where the better model pays.
 
 **3. It becomes the best controller in the study on effort-adjusted accuracy.**
 0.79 cm at 0.08 rad/s mean steering rate. Stanley reaches 0.64 cm but spends
-2.51 rad/s — 31x the actuator activity for 20% better tracking.
+2.51 rad/s, 31x the actuator activity for 20% better tracking.
 
 **4. It also solves faster: 2.1 ms vs 15 ms**, despite twice the state
 dimension. Passing A, B and C as matrix parameters is far more solver-friendly
@@ -364,7 +365,7 @@ The same parameters give a standard vehicle dynamics quantity:
 
     K = (m/L) * (lr/C_f - lf/C_r) = +0.00292 rad/(m/s^2)
 
-Positive K means the platform **understeers** — at the limit it pushes wide
+Positive K means the platform **understeers**: at the limit it pushes wide
 rather than rotating. That follows from rear cornering stiffness exceeding
 front (96.2 vs 89.9 N/rad), which is how essentially every production passenger
 car is deliberately set up, because understeer is recoverable and oversteer
@@ -373,7 +374,7 @@ generally is not.
 
 ---
 
-## Part 5 — What happens when the grip runs out?
+## Part 5: What happens when the grip runs out?
 
 Part 4 showed that a better vehicle model removes speed-dependent error. That
 raises an obvious follow-up: the dynamic model contains a friction coefficient.
@@ -386,7 +387,7 @@ whose model is given the true mu.
 
 Only the last one is told the road changed.
 
-### Results — mean cross-track error, cm
+### Results: mean cross-track error, cm
 
 | mu | Pure pursuit | Stanley | MPC (assumes dry) | MPC (knows mu) |
 |---|---|---|---|---|
@@ -414,8 +415,8 @@ above mu = 0.75 and loses to it below. A comparison run only on dry pavement
 would have reported the wrong answer for half the operating envelope.
 
 **3. A model that is wrong about grip gets progressively more wrong.** MPC
-assuming dry pavement degrades 9.7x from dry to ice — the largest relative
-degradation in the study — though it remains the best of the three in absolute
+assuming dry pavement degrades 9.7x from dry to ice, the largest relative
+degradation in the study, though it remains the best of the three in absolute
 terms at every mu.
 
 **4. Knowing the friction coefficient makes the controller nearly
@@ -430,12 +431,12 @@ The controller does not need more grip. It needs to know how much grip it has.
 
 With the correct friction in its model, MPC predicts the larger slip angles
 correctly, anticipates the resulting drift, and steers for it. The car still
-slides — it slides where the controller expected it to.
+slides; it slides where the controller expected it to.
 
 This is the mechanism behind online road-friction estimation in production
 autonomous vehicles: an accurate estimate of surface conditions is worth more
 to a model-based controller than a large safety margin is. It also reframes
-what "driving carefully in the rain" means for an AV — the useful response is
+what "driving carefully in the rain" means for an AV: the useful response is
 not only to slow down, but to update the model the controller is planning
 against.
 
@@ -443,16 +444,119 @@ against.
 
 One track, one speed setting, one friction model. The simulator scales tire
 forces with mu; a real surface change also alters the shape of the tire curve,
-not just its scale. And "knows mu" is an idealisation — a real vehicle has to
+not just its scale. And "knows mu" is an idealisation: a real vehicle has to
 estimate friction online, which is its own hard problem and a source of error
 this experiment does not capture.
 
 
 ---
 
+## Part 6: Understeer, oversteer, and a knob that does nothing
+
+The plan was to make the car oversteer by moving its centre of gravity
+rearward, then see which controllers could cope. That plan failed immediately,
+and the reason it failed is the more useful result.
+
+### Moving the CG does nothing to the balance
+
+Sweeping the CG from 35% front to 65% front changes cornering stiffness a great
+deal. Front axle stiffness falls from 112 to 61 N/rad, rear rises from 70 to
+130. The understeer gradient does not move at all: it stays at +0.00292 for
+every position tested.
+
+The algebra explains it. With cornering stiffness proportional to static axle
+load:
+
+    K  = (m/L) * (lr/C_f - lf/C_r)
+    C_f = C_Sf * m*g*lr/L        so   lr/C_f = L/(C_Sf*m*g)
+    C_r = C_Sr * m*g*lf/L        so   lf/C_r = L/(C_Sr*m*g)
+
+    => K = (1/g) * (1/C_Sf - 1/C_Sr)
+
+`lf` and `lr` cancel completely. Shifting mass rearward unloads the front tires
+and loads the rear, and the stiffness change exactly offsets the moment-arm
+change. In this model, balance is a property of the tires, not of where the mass
+sits.
+
+This is an artifact of the linear load-proportional tire model. Real tires
+saturate, so real cornering stiffness is not proportional to load at high loads,
+and CG position genuinely does affect balance on a real vehicle. The useful
+takeaway is narrower and still worth having: the model tells you which parameter
+actually moves the quantity you care about, and it was not the obvious one.
+
+### Sweeping the stiffness ratio instead
+
+Varying rear cornering stiffness `C_Sr` from 7.0 down to 3.0 moves the vehicle
+from strong understeer through exactly neutral at `C_Sr = C_Sf = 4.718` and into
+severe oversteer. Speed fixed at vgain 0.7.
+
+| C_Sr | K | Balance | Critical speed | Pure pursuit | Stanley | MPC (default model) | MPC (knows balance) |
+|---|---|---|---|---|---|---|---|
+| 7.000 | +0.00704 | understeer | n/a | 3.67 | 1.83 | 1.05 | 0.94 |
+| 6.000 | +0.00462 | understeer | n/a | 3.30 | 2.05 | 0.92 | 0.78 |
+| 5.456 | +0.00292 | understeer | n/a | 3.09 | 2.14 | 0.83 | 0.83 |
+| 4.718 | 0.00000 | neutral | n/a | 2.56 | 2.19 | 1.16 | **0.67** |
+| 4.200 | -0.00266 | oversteer | 11.1 m/s | 2.48 | 2.53 | 1.88 | **0.67** |
+| 3.600 | -0.00671 | oversteer | 7.0 m/s | 1.70 | 2.84 | 2.99 | **0.71** |
+| 3.000 | -0.01237 | oversteer | 5.2 m/s | 1.03 | **crash** | 4.40 | **0.64** |
+
+Mean cross-track error in cm.
+
+![Handling balance sweep](balance_sweep.png)
+
+### Findings
+
+**1. Pure pursuit improves as the car oversteers.** Error falls from 3.67 cm at
+strong understeer to 1.03 cm at severe oversteer, the opposite direction from
+every other controller. Its structural flaw is corner-cutting: it aims at a
+point already partway around the bend and turns in too little. An oversteering
+vehicle rotates more than commanded. The two errors partially cancel, so a
+controller weakness is masked by a vehicle defect.
+
+**2. Stanley spins out.** At K = -0.0124 it fails to complete a lap, with a
+maximum error of 42 cm. This is the third experiment in which the most
+aggressive controller is the first to fail, after low grip in Part 5. It
+commands large corrections, a loose rear axle rotates further than the
+correction assumed, and it cannot catch the resulting yaw.
+
+**3. The instability is predictable in closed form.** An oversteering vehicle
+has a critical speed above which it is open-loop unstable:
+
+    v_crit = sqrt(-L/K)
+
+At `C_Sr = 3.0` that is 5.2 m/s, and the raceline speed profile reaches 5.6 m/s.
+The vehicle is driven past its own stability limit, and that is exactly where
+Stanley fails. A textbook vehicle dynamics formula predicted the failure
+condition before the simulation ran.
+
+**4. MPC that knows the balance is unaffected by it.** Across the full range,
+from strong understeer through severe oversteer past the critical speed, error
+stays between 0.64 and 0.94 cm. The same MPC running the default model degrades
+from 0.83 to 4.40 cm over the same sweep.
+
+### The pattern across Parts 4, 5 and 6
+
+Three independent experiments varied speed, surface friction and handling
+balance. Each produced the same structure of result.
+
+**The controller does not need the vehicle to be well behaved. It needs to know
+how the vehicle behaves.**
+
+Given an accurate model, MPC tracks a vehicle that oversteers past its critical
+speed on a low-grip surface about as well as it tracks a well-balanced vehicle
+on dry pavement. Given a stale model, it degrades in direct proportion to how
+wrong that model is.
+
+That is the practical argument for model-based control, and equally the argument
+for treating parameter identification and online estimation as first-class
+engineering problems rather than setup details.
+
+
+---
+
 ## Two bugs worth documenting
 
-Stanley initially crashed 0.47 s into every run, at every gain value — including
+Stanley initially crashed 0.47 s into every run, at every gain value, including
 gains an order of magnitude apart, which produced *identical* logs.
 
 Gain-independence was the tell. If the gain does not matter, the steering
@@ -464,7 +568,7 @@ standard `atan2(dy, dx)`. Verified against path geometry: mean offset 1.5728 rad
 across all 783 waypoints, standard deviation 0.058.
 
 **Pure pursuit never caught it.** It is purely geometric and never reads the
-stored heading — it derives everything from waypoint positions. Stanley consumes
+stored heading; it derives everything from waypoint positions. Stanley consumes
 path heading directly and so was fully exposed.
 
 A silent data-convention mismatch that one consumer is immune to and another is
@@ -474,7 +578,7 @@ not is a real class of integration failure, and worth having found once.
 
 The first MPC attempt tracked absolute x, y, and theta against absolute
 waypoints. It crashed at the same corner every lap, at 13.19 s, regardless of
-cost weights — `q_pos` swept from 20 to 2000, `q_yaw` from 0 to 10, rate
+cost weights: `q_pos` swept from 20 to 2000, `q_yaw` from 0 to 10, rate
 penalties across an order of magnitude. Every run failed within 0.6 s of the
 same point.
 
@@ -482,13 +586,13 @@ same point.
 Stanley: if the knobs do not change the outcome, the problem is not the knobs.
 
 Ruled out along the way: steering sign (verified empirically against the
-simulator — +0.25 rad produced +0.53 rad of heading change), numerical
+simulator, where +0.25 rad produced +0.53 rad of heading change), numerical
 conditioning (shifting the QP into local coordinates changed nothing),
 overspeed (removing a 10% speed allowance bought 0.5 s), and timestep and
 horizon length (finer discretisation made it worse).
 
 The cause was the formulation itself. Vehicle heading accumulates without bound
-over a lap — theta exceeded 4 rad and kept climbing — and the affine
+over a lap (theta exceeded 4 rad and kept climbing), and the affine
 linearisation terms scale with theta, so the QP conditions progressively worse
 as the lap proceeds. Rewriting in path-frame error coordinates fixed it on the
 first attempt: every state now sits near zero, the linearisation stays valid,
@@ -509,7 +613,8 @@ is not the knob.*
 - [x] MPC over the bicycle model (path-frame error coordinates, OSQP)
 - [x] Vehicle dynamics: kinematic vs dynamic prediction model, understeer gradient
 - [x] Vehicle dynamics: friction sweep across four controllers
-- [ ] Vehicle dynamics: load transfer, CG position, understeer/oversteer tuning
+- [x] Vehicle dynamics: understeer/oversteer sweep, critical speed prediction
+- [ ] Vehicle dynamics: longitudinal load transfer under braking
 - [ ] Port to ROS 2 nodes
 - [ ] Hardware build (Raspberry Pi 5, RPLIDAR C1, 1/10 chassis)
 - [ ] Sim-to-real: same controllers, measured gap
