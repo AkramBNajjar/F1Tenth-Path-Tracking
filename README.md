@@ -7,8 +7,8 @@ The goal is not to build a car that drives. It is to **measure** how different
 controllers trade tracking accuracy against speed, stability, and control
 effort — and to find where each one breaks.
 
-**Status:** four controllers in simulation, including MPC with both kinematic
-and dynamic vehicle models. ROS 2 port next. Hardware in Spring 2027.
+**Status:** four controllers in simulation, characterised across speed and
+surface friction. ROS 2 port next. Hardware in Spring 2027.
 
 ---
 
@@ -39,6 +39,7 @@ python path_tracking.py sweep      # parameter sweeps for both
 python mpc.py                      # model predictive control
 python mpc.py sweep                # horizon and speed sweep
 python mpc_dyn.py                  # MPC with the dynamic (tire slip) model
+python friction_sweep.py           # all controllers vs surface grip
 python plot_tracking.py            # regenerate figures
 ```
 
@@ -372,6 +373,83 @@ generally is not.
 
 ---
 
+## Part 5 — What happens when the grip runs out?
+
+Part 4 showed that a better vehicle model removes speed-dependent error. That
+raises an obvious follow-up: the dynamic model contains a friction coefficient.
+What happens when the road stops matching it?
+
+**Test:** hold speed fixed (vgain 0.7) and sweep the simulator's surface
+friction from mu = 1.05 (dry) down to mu = 0.4 (ice). Run four controllers:
+pure pursuit, Stanley, MPC whose model still assumes dry pavement, and MPC
+whose model is given the true mu.
+
+Only the last one is told the road changed.
+
+### Results — mean cross-track error, cm
+
+| mu | Pure pursuit | Stanley | MPC (assumes dry) | MPC (knows mu) |
+|---|---|---|---|---|
+| 1.05 | 3.09 | 2.14 | 0.83 | 0.83 |
+| 0.90 | 3.82 | 3.08 | 1.07 | **0.68** |
+| 0.80 | 4.43 | 4.17 | 1.52 | **0.58** |
+| 0.70 | 5.30 | 5.75 | 2.37 | **0.50** |
+| 0.60 | 6.57 | 8.01 | 3.62 | **0.53** |
+| 0.50 | 8.11 | 10.83 | 5.37 | **0.58** |
+| 0.40 | 10.77 | **crash** | 8.04 | **0.71** |
+
+![Friction sweep](friction_sweep.png)
+
+### Findings
+
+**1. The most accurate controller on dry pavement is the first to fail on ice.**
+Stanley has the best tracking of the two geometric controllers at mu = 1.05 and
+is the only controller that fails to complete a lap at mu = 0.4. It corrects
+aggressively at the front axle, which demands large slip angles, which is
+precisely what a low-grip surface cannot supply. Its dry-pavement strength is
+its low-grip failure mode.
+
+**2. Ranking depends on the operating condition.** Stanley beats pure pursuit
+above mu = 0.75 and loses to it below. A comparison run only on dry pavement
+would have reported the wrong answer for half the operating envelope.
+
+**3. A model that is wrong about grip gets progressively more wrong.** MPC
+assuming dry pavement degrades 9.7x from dry to ice — the largest relative
+degradation in the study — though it remains the best of the three in absolute
+terms at every mu.
+
+**4. Knowing the friction coefficient makes the controller nearly
+grip-independent.** MPC given the true mu holds 0.83 cm on dry and 0.71 cm at
+mu = 0.4: a factor of 0.9, marginally *better* on ice than on dry pavement.
+Same controller, same weights, same speed. The only change is scaling cornering
+stiffness by the true friction coefficient.
+
+### Why finding 4 matters
+
+The controller does not need more grip. It needs to know how much grip it has.
+
+With the correct friction in its model, MPC predicts the larger slip angles
+correctly, anticipates the resulting drift, and steers for it. The car still
+slides — it slides where the controller expected it to.
+
+This is the mechanism behind online road-friction estimation in production
+autonomous vehicles: an accurate estimate of surface conditions is worth more
+to a model-based controller than a large safety margin is. It also reframes
+what "driving carefully in the rain" means for an AV — the useful response is
+not only to slow down, but to update the model the controller is planning
+against.
+
+### Scope
+
+One track, one speed setting, one friction model. The simulator scales tire
+forces with mu; a real surface change also alters the shape of the tire curve,
+not just its scale. And "knows mu" is an idealisation — a real vehicle has to
+estimate friction online, which is its own hard problem and a source of error
+this experiment does not capture.
+
+
+---
+
 ## Two bugs worth documenting
 
 Stanley initially crashed 0.47 s into every run, at every gain value — including
@@ -430,7 +508,8 @@ is not the knob.*
 - [x] True cross-track error and control-effort metrics
 - [x] MPC over the bicycle model (path-frame error coordinates, OSQP)
 - [x] Vehicle dynamics: kinematic vs dynamic prediction model, understeer gradient
-- [ ] Vehicle dynamics: friction sweep, load transfer, CG position
+- [x] Vehicle dynamics: friction sweep across four controllers
+- [ ] Vehicle dynamics: load transfer, CG position, understeer/oversteer tuning
 - [ ] Port to ROS 2 nodes
 - [ ] Hardware build (Raspberry Pi 5, RPLIDAR C1, 1/10 chassis)
 - [ ] Sim-to-real: same controllers, measured gap
