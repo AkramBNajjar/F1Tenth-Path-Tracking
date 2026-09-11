@@ -1,0 +1,29 @@
+[0.281s] Invoking command in '/ws/build/f1tenth_control': PYTHONPATH=/ws/build/f1tenth_control/prefix_override:/usr/lib/python3/dist-packages/colcon_core/task/python/colcon_distutils_commands:/ws/install/f1tenth_control/lib/python3.12/site-packages:${PYTHONPATH} /usr/bin/python3 -W ignore:setup.py install is deprecated -W ignore:easy_install command is deprecated setup.py develop --editable --build-directory /ws/build/f1tenth_control/build --no-deps symlink_data
+[0.359s] running develop
+[0.393s] running egg_info
+[0.393s] creating f1tenth_control.egg-info
+[0.396s] writing f1tenth_control.egg-info/PKG-INFO
+[0.397s] writing dependency_links to f1tenth_control.egg-info/dependency_links.txt
+[0.397s] writing entry points to f1tenth_control.egg-info/entry_points.txt
+[0.398s] writing requirements to f1tenth_control.egg-info/requires.txt
+[0.398s] writing top-level names to f1tenth_control.egg-info/top_level.txt
+[0.398s] writing manifest file 'f1tenth_control.egg-info/SOURCES.txt'
+[0.406s] reading manifest file 'f1tenth_control.egg-info/SOURCES.txt'
+[0.407s] writing manifest file 'f1tenth_control.egg-info/SOURCES.txt'
+[0.411s] running build_ext
+[0.411s] Creating /ws/install/f1tenth_control/lib/python3.12/site-packages/f1tenth-control.egg-link (link to .)
+[0.413s] Installing pure_pursuit script to /ws/install/f1tenth_control/lib/f1tenth_control
+[0.413s] Installing sim_bridge script to /ws/install/f1tenth_control/lib/f1tenth_control
+[0.414s] Installing stanley script to /ws/install/f1tenth_control/lib/f1tenth_control
+[0.414s] 
+[0.415s] Installed /ws/build/f1tenth_control
+[0.415s] running symlink_data
+[0.416s] creating /ws/install/f1tenth_control/share/ament_index
+[0.416s] creating /ws/install/f1tenth_control/share/ament_index/resource_index
+[0.416s] creating /ws/install/f1tenth_control/share/ament_index/resource_index/packages
+[0.417s] symbolically linking /ws/build/f1tenth_control/resource/f1tenth_control -> /ws/install/f1tenth_control/share/ament_index/resource_index/packages
+[0.417s] symbolically linking /ws/build/f1tenth_control/package.xml -> /ws/install/f1tenth_control/share/f1tenth_control
+[0.417s] creating /ws/install/f1tenth_control/share/f1tenth_control/launch
+[0.418s] symbolically linking /ws/build/f1tenth_control/launch/pure_pursuit.launch.py -> /ws/install/f1tenth_control/share/f1tenth_control/launch
+[0.418s] symbolically linking /ws/build/f1tenth_control/launch/stanley.launch.py -> /ws/install/f1tenth_control/share/f1tenth_control/launch
+[0.428s] Invoked command in '/ws/build/f1tenth_control' returned '0': PYTHONPATH=/ws/build/f1tenth_control/prefix_override:/usr/lib/python3/dist-packages/colcon_core/task/python/colcon_distutils_commands:/ws/install/f1tenth_control/lib/python3.12/site-packages:${PYTHONPATH} /usr/bin/python3 -W ignore:setup.py install is deprecated -W ignore:easy_install command is deprecated setup.py develop --editable --build-directory /ws/build/f1tenth_control/build --no-deps symlink_data

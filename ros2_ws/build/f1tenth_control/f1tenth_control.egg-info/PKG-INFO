@@ -1,0 +1,7 @@
+Metadata-Version: 2.1
+Name: f1tenth-control
+Version: 0.1.0
+Summary: Path-tracking controllers for the F1TENTH platform as ROS 2 nodes.
+Maintainer: Akram Badaoui-Najjar
+Maintainer-email: akrambn939@gmail.com
+License: MIT
