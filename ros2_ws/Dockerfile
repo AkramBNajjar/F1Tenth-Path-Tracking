@@ -3,7 +3,7 @@
 FROM ros:jazzy-ros-base
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
-      python3-pip git ros-jazzy-ackermann-msgs \
+      python3-pip git ros-jazzy-ackermann-msgs ros-jazzy-foxglove-bridge \
     && rm -rf /var/lib/apt/lists/*
 
 # f1tenth_gym pins are stale (see SETUP_MACOS.md). Install without them.

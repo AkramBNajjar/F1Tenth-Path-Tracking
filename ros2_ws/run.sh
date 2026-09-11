@@ -3,4 +3,4 @@
 set -e
 cd "$(dirname "$0")"
 docker build -t f1tenth-ros2 .
-docker run -it --rm -v "$(pwd)":/ws f1tenth-ros2 bash
+docker run -it --rm -p 8765:8765 -v "$(pwd)":/ws f1tenth-ros2 bash
