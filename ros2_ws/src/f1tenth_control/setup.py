@@ -22,6 +22,7 @@ setup(
     entry_points={
         'console_scripts': [
             'sim_bridge = f1tenth_control.sim_bridge_node:main',
+            'viz = f1tenth_control.viz_node:main',
             'pure_pursuit = f1tenth_control.pure_pursuit_node:main',
             'stanley = f1tenth_control.stanley_node:main',
         ],
