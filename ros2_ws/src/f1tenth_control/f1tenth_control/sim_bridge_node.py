@@ -20,6 +20,8 @@ from rclpy.node import Node
 from sensor_msgs.msg import LaserScan
 from nav_msgs.msg import Odometry
 from ackermann_msgs.msg import AckermannDriveStamped
+from geometry_msgs.msg import TransformStamped
+from tf2_ros import TransformBroadcaster, StaticTransformBroadcaster
 
 from f110_gym.envs.f110_env import F110Env
 
@@ -48,6 +50,17 @@ class SimBridge(Node):
         self.scan_pub = self.create_publisher(LaserScan, "/scan", 10)
         self.odom_pub = self.create_publisher(Odometry, "/ego_racecar/odom", 10)
         self.create_subscription(AckermannDriveStamped, "/drive", self.on_drive, 10)
+
+        # TF tree: map -> ego_racecar/base_link -> ego_racecar/laser
+        self.tf = TransformBroadcaster(self)
+        self.static_tf = StaticTransformBroadcaster(self)
+        st = TransformStamped()
+        st.header.stamp = self.get_clock().now().to_msg()
+        st.header.frame_id = "ego_racecar/base_link"
+        st.child_frame_id = "ego_racecar/laser"
+        st.transform.translation.x = 0.27
+        st.transform.rotation.w = 1.0
+        self.static_tf.sendTransform(st)
 
         rate = self.get_parameter("rate_hz").value
         self.create_timer(1.0 / rate, self.tick)
@@ -90,6 +103,18 @@ class SimBridge(Node):
         od.twist.twist.linear.x = float(self.obs["linear_vels_x"][0])
         od.twist.twist.angular.z = float(self.obs["ang_vels_z"][0])
         self.odom_pub.publish(od)
+
+        t = TransformStamped()
+        t.header.stamp = now
+        t.header.frame_id = "map"
+        t.child_frame_id = "ego_racecar/base_link"
+        t.transform.translation.x = float(self.obs["poses_x"][0])
+        t.transform.translation.y = float(self.obs["poses_y"][0])
+        t.transform.rotation.x = qx
+        t.transform.rotation.y = qy
+        t.transform.rotation.z = qz
+        t.transform.rotation.w = qw
+        self.tf.sendTransform(t)
 
 
 def main(args=None):

@@ -1,3 +1,13 @@
+#!/usr/bin/env bash
+# Upgrades the visualization node: speed-coloured raceline, heading arrow,
+# live telemetry text. Run from the repo root:  bash upgrade_viz.sh
+# Then rebuild in the container: colcon build --symlink-install
+set -e
+
+PKG="ros2_ws/src/f1tenth_control"
+[ -d "$PKG" ] || { echo "run from the repo root (ros2_ws/ not found)"; exit 1; }
+
+cat > "$PKG/f1tenth_control/viz_node.py" << 'VIZEOF'
 """Visualization for the F1TENTH path-tracking study.
 
     /map            OccupancyGrid   the track
@@ -246,3 +256,8 @@ def main(args=None):
     finally:
         node.destroy_node()
         rclpy.shutdown()
+VIZEOF
+
+echo "viz_node.py upgraded. In the container:"
+echo "  cd /ws && colcon build --symlink-install && source install/setup.bash"
+echo "  ros2 launch f1tenth_control pure_pursuit_viz.launch.py"
