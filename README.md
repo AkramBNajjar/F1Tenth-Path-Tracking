@@ -7,8 +7,15 @@ The goal is not to build a car that drives. It is to **measure** how different
 controllers trade tracking accuracy against speed, stability, and control
 effort, and to find where each one breaks.
 
+![Pure pursuit tracking the raceline](demo.gif)
+
+*Pure pursuit running as a ROS 2 node. Magenta is the LiDAR return, the
+raceline is coloured by target speed (green fast, orange slow), cyan is the
+path actually driven, and the yellow line runs from the vehicle to its
+lookahead point. Live speed and cross-track error are overlaid.*
+
 **Status:** four controllers in simulation, characterised across speed, surface
-friction, handling balance and longitudinal load transfer. ROS 2 port next.
+friction, handling balance and longitudinal load transfer, and ported to ROS 2.
 Hardware in Spring 2027.
 
 ---
