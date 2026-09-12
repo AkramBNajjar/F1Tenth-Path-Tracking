@@ -3,7 +3,7 @@ import os, warnings; warnings.filterwarnings("ignore")
 import numpy as np
 import matplotlib; matplotlib.use("Agg")
 import matplotlib.pyplot as plt
-from path_tracking import PurePursuit, Stanley, run, PATH
+from controllers.path_tracking import PurePursuit, Stanley, run, PATH
 
 PP, ST, GREY = "#2166ac", "#c0392b", "#999999"
 

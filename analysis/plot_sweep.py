@@ -22,7 +22,7 @@ import matplotlib.pyplot as plt  # noqa: E402
 
 from f110_gym.envs.f110_env import F110Env  # noqa: E402
 import f110_gym  # noqa: E402
-from wall_follower import WallFollower  # noqa: E402
+from controllers.wall_follower import WallFollower  # noqa: E402
 
 MAP = os.path.join(os.path.dirname(f110_gym.__file__), "envs", "maps", "levine")
 LOOKAHEADS = [round(x, 2) for x in np.arange(0.60, 2.001, 0.05)]
