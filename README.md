@@ -7,7 +7,7 @@ The goal is not to build a car that drives. It is to **measure** how different
 controllers trade tracking accuracy against speed, stability, and control
 effort, and to find where each one breaks.
 
-![Pure pursuit tracking the raceline](demo.gif)
+![Pure pursuit tracking the raceline](figures/demo.gif)
 
 *Pure pursuit running as a ROS 2 node. Magenta is the LiDAR return, the
 raceline is coloured by target speed (green fast, orange slow), cyan is the
@@ -117,7 +117,7 @@ PID acts on `e = D_desired - D_t+1`.
 29 values from 0.60 to 2.00 m at 0.05 m resolution. Levine map, 2.5 m/s,
 kp = 1.0, kd = 0.6.
 
-![Lookahead sweep](lookahead_sweep.png)
+![Lookahead sweep](figures/lookahead_sweep.png)
 
 **Only 9 of 29 runs completed a lap, and the survivors are scattered**: 0.75
 laps, 0.80 to 0.95 all crash, 1.00 laps, 1.05 to 1.40 all crash, 1.45 to 1.50 lap.
@@ -185,9 +185,9 @@ Matched speed profile (vgain 0.6), same raceline, same map.
 | Pure pursuit (Ld = 1.0) | 1.98 cm | 5.51 cm | 37.19 s | 0.12 rad/s |
 | Stanley (k = 3.5) | **0.64 cm** | **3.05 cm** | 37.14 s | 2.51 rad/s |
 
-![Trajectory and error](tracking_comparison.png)
+![Trajectory and error](figures/tracking_comparison.png)
 
-![Tradeoff](tracking_tradeoff.png)
+![Tradeoff](figures/tracking_tradeoff.png)
 
 ### Findings
 
@@ -345,7 +345,7 @@ Path curvature enters as a desired yaw rate disturbance, psi_dot_des = v*kappa.
 | 0.7 | 32.0 s | 2.33 cm | **0.83 cm** | 6.75 cm | **3.00 cm** |
 | 0.8 | 28.1 s | 3.71 cm | **0.80 cm** | 10.15 cm | **2.87 cm** |
 
-![Model comparison](model_comparison.png)
+![Model comparison](figures/model_comparison.png)
 
 ### Findings
 
@@ -408,7 +408,7 @@ Only the last one is told the road changed.
 | 0.50 | 8.11 | 10.83 | 5.37 | **0.58** |
 | 0.40 | 10.77 | **crash** | 8.04 | **0.71** |
 
-![Friction sweep](friction_sweep.png)
+![Friction sweep](figures/friction_sweep.png)
 
 ### Findings
 
@@ -511,7 +511,7 @@ severe oversteer. Speed fixed at vgain 0.7.
 
 Mean cross-track error in cm.
 
-![Handling balance sweep](balance_sweep.png)
+![Handling balance sweep](figures/balance_sweep.png)
 
 ### Findings
 
@@ -611,7 +611,7 @@ vgain 0.7.
 | 0.140 | 2.90 / 3.93 | 1.98 / 4.51 | 0.94 / 1.07 |
 | 0.180 | 2.88 / 4.10 | 1.89 / 4.37 | 0.91 / 0.97 |
 
-![Load transfer sweep](loadtransfer_sweep.png)
+![Load transfer sweep](figures/loadtransfer_sweep.png)
 
 **Nothing happens.** A sixfold change in CG height moves tracking error by
 fractions of a centimetre, in no consistent direction, and no controller fails.
